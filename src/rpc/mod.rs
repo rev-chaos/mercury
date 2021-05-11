@@ -1,5 +1,6 @@
 pub mod rpc_impl;
 
+use ckb_jsonrpc_types::{Transaction, TransactionView};
 use ckb_types::H256;
 use jsonrpc_core::Result as RpcResult;
 use jsonrpc_derive::rpc;
@@ -19,4 +20,7 @@ pub trait MercuryRpc {
 
     #[rpc(name = "is_in_rce_list")]
     fn is_in_rce_list(&self, rce_hash: H256, addr: H256) -> RpcResult<bool>;
+
+    #[rpc(name = "rce_transaction_completion")]
+    fn rce_tx_completion(&self, transaction: Transaction) -> RpcResult<TransactionView>;
 }

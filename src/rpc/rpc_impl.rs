@@ -1,17 +1,20 @@
 use crate::extensions::{
     ckb_balance, rce_validator, udt_balance, CKB_EXT_PREFIX, RCE_EXT_PREFIX, UDT_EXT_PREFIX,
 };
-use crate::rpc::MercuryRpc;
-use crate::stores::add_prefix;
-
+use crate::types::DeployedScriptConfig;
 use crate::utils::{parse_address, to_fixed_array};
+use crate::{rpc::MercuryRpc, stores::add_prefix};
 
 use ckb_indexer::store::Store;
-use ckb_types::{prelude::Pack, H256};
+use ckb_jsonrpc_types::{CellOutput, ScriptHashType, Transaction, TransactionView};
+use ckb_types::{core, packed, prelude::Pack, H256};
 use jsonrpc_core::{Error, Result as RpcResult};
+
+use std::collections::HashMap;
 
 pub struct MercuryRpcImpl<S> {
     store: S,
+    config: HashMap<String, DeployedScriptConfig>,
 }
 
 impl<S> MercuryRpc for MercuryRpcImpl<S>
@@ -68,12 +71,44 @@ where
             .get(&add_prefix(*RCE_EXT_PREFIX, key))
             .map_or_else(|_| Err(Error::internal_error()), |res| Ok(res.is_some()))
     }
+
+    fn rce_tx_completion(&self, transaction: Transaction) -> RpcResult<TransactionView> {
+        let mut rce_list = Vec::new();
+
+        for output in transaction.outputs.iter() {
+            if self.is_rce_cell(output) {
+                rce_list.push(output);
+            }
+        }
+
+        Ok(Default::default())
+    }
 }
 
-impl<S: Store + Clone> MercuryRpcImpl<S> {
-    pub fn new(store: S) -> Self {
-        MercuryRpcImpl { store }
+impl<S: Store> MercuryRpcImpl<S> {
+    pub fn new(store: S, config: HashMap<String, DeployedScriptConfig>) -> Self {
+        MercuryRpcImpl { store, config }
     }
+
+    // TODO: can do perf here
+    fn is_rce_cell(&self, cell: &CellOutput) -> bool {
+        if let Some(rce_config) = self.config.get(rce_validator::RCE) {
+            if let Some(type_script) = cell.type_.clone() {
+                if type_script.code_hash.pack() == rce_config.script.code_hash()
+                    && rce_config.script.hash_type() == hash_type_to_byte(type_script.hash_type)
+                {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+}
+
+fn hash_type_to_byte(input: ScriptHashType) -> packed::Byte {
+    let ret: core::ScriptHashType = input.into();
+    ret.into()
 }
 
 #[cfg(test)]
@@ -107,7 +142,7 @@ mod tests {
             Arc::clone(&indexer),
             batch_store.clone(),
         );
-        let rpc = MercuryRpcImpl::new(store);
+        let rpc = MercuryRpcImpl::new(store, HashMap::new());
 
         // setup test data
         let lock_script1 = ScriptBuilder::default()

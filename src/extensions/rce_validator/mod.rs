@@ -15,7 +15,7 @@ use molecule::prelude::Entity;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 
-const RCE: &str = "rce";
+pub const RCE: &str = "rce";
 
 pub struct RceValidatorExtension<S> {
     store: S,
