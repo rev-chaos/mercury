@@ -5,9 +5,12 @@ use crate::types::DeployedScriptConfig;
 use crate::utils::{parse_address, to_fixed_array};
 use crate::{rpc::MercuryRpc, stores::add_prefix};
 
-use ckb_indexer::store::Store;
-use ckb_jsonrpc_types::{CellOutput, ScriptHashType, Transaction, TransactionView};
-use ckb_types::{core, packed, prelude::Pack, H256};
+use anyhow::Result;
+use ckb_indexer::indexer;
+use ckb_indexer::store::{IteratorDirection, Store};
+use ckb_jsonrpc_types::{Transaction, TransactionView};
+use ckb_types::core::BlockNumber;
+use ckb_types::{packed, prelude::*, H256};
 use jsonrpc_core::{Error, Result as RpcResult};
 
 use std::collections::HashMap;
@@ -42,7 +45,7 @@ where
 
         self.store
             .get(&add_prefix(*UDT_EXT_PREFIX, key))
-            .map_err(|_| Error::internal_error())?
+            .map_err(|e| Error::invalid_params(e.to_string()))?
             .map_or_else(
                 || Ok(None),
                 |bytes| Ok(Some(u128::from_be_bytes(to_fixed_array(&bytes)))),
@@ -57,7 +60,7 @@ where
 
         self.store
             .get(&add_prefix(*UDT_EXT_PREFIX, key))
-            .map_err(|_| Error::internal_error())?
+            .map_err(|e| Error::invalid_params(e.to_string()))?
             .map_or_else(
                 || Ok(None),
                 |bytes| Ok(Some(u128::from_be_bytes(to_fixed_array(&bytes)))),
@@ -69,14 +72,31 @@ where
 
         self.store
             .get(&add_prefix(*RCE_EXT_PREFIX, key))
-            .map_or_else(|_| Err(Error::internal_error()), |res| Ok(res.is_some()))
+            .map_or_else(
+                |err| Err(Error::invalid_params(err.to_string())),
+                |res| Ok(res.is_some()),
+            )
     }
 
     fn rce_tx_completion(&self, transaction: Transaction) -> RpcResult<TransactionView> {
         let mut rce_list = Vec::new();
 
+        for input in transaction.inputs.iter() {
+            if let Some(cell) = self
+                .get_detailed_live_cell(input.previous_output.clone().into())
+                .map_err(|e| Error::invalid_params(e.to_string()))?
+            {
+                if self.is_rce_cell(&cell.cell_output) {
+                    rce_list.push(cell.cell_output);
+                }
+            } else {
+                return Err(Error::internal_error());
+            }
+        }
+
         for output in transaction.outputs.iter() {
-            if self.is_rce_cell(output) {
+            let output: packed::CellOutput = output.clone().into();
+            if self.is_rce_cell(&output) {
                 rce_list.push(output);
             }
         }
@@ -91,11 +111,11 @@ impl<S: Store> MercuryRpcImpl<S> {
     }
 
     // TODO: can do perf here
-    fn is_rce_cell(&self, cell: &CellOutput) -> bool {
+    fn is_rce_cell(&self, cell: &packed::CellOutput) -> bool {
         if let Some(rce_config) = self.config.get(rce_validator::RCE) {
-            if let Some(type_script) = cell.type_.clone() {
-                if type_script.code_hash.pack() == rce_config.script.code_hash()
-                    && rce_config.script.hash_type() == hash_type_to_byte(type_script.hash_type)
+            if let Some(type_script) = cell.type_().to_opt() {
+                if type_script.code_hash() == rce_config.script.code_hash()
+                    && rce_config.script.hash_type() == type_script.hash_type()
                 {
                     return true;
                 }
@@ -104,11 +124,44 @@ impl<S: Store> MercuryRpcImpl<S> {
 
         false
     }
-}
 
-fn hash_type_to_byte(input: ScriptHashType) -> packed::Byte {
-    let ret: core::ScriptHashType = input.into();
-    ret.into()
+    fn get_detailed_live_cell(
+        &self,
+        out_point: packed::OutPoint,
+    ) -> Result<Option<indexer::DetailedLiveCell>> {
+        let key_vec = indexer::Key::OutPoint(&out_point).into_vec();
+        let (block_number, tx_index, cell_output, cell_data) = match self.store.get(&key_vec)? {
+            Some(stored_cell) => indexer::Value::parse_cell_value(&stored_cell),
+            None => return Ok(None),
+        };
+        let mut header_start_key = vec![indexer::KeyPrefix::Header as u8];
+        header_start_key.extend_from_slice(&block_number.to_be_bytes());
+
+        let block_hash = match self
+            .store
+            .iter(&header_start_key, IteratorDirection::Forward)?
+            .next()
+        {
+            Some((key, _)) => {
+                if key.starts_with(&header_start_key) {
+                    let start = std::mem::size_of::<BlockNumber>() + 1;
+                    packed::Byte32::from_slice(&key[start..start + 32])
+                        .expect("stored key header hash")
+                } else {
+                    return Ok(None);
+                }
+            }
+            None => return Ok(None),
+        };
+
+        Ok(Some(indexer::DetailedLiveCell {
+            block_number,
+            block_hash,
+            tx_index,
+            cell_output,
+            cell_data,
+        }))
+    }
 }
 
 #[cfg(test)]
@@ -124,7 +177,7 @@ mod tests {
         capacity_bytes, BlockBuilder, Capacity, HeaderBuilder, ScriptHashType, TransactionBuilder,
     };
     use ckb_types::packed::{CellInput, CellOutputBuilder, Script, ScriptBuilder};
-    use ckb_types::{bytes::Bytes, prelude::*, H256};
+    use ckb_types::{bytes::Bytes, H256};
 
     use std::sync::Arc;
 

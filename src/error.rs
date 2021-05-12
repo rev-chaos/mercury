@@ -1,5 +1,6 @@
 use ckb_indexer::store::Error as StoreError;
 use derive_more::Display;
+use jsonrpc_core::Error as RpcError;
 
 #[allow(dead_code)]
 #[derive(Debug, Display)]
@@ -21,5 +22,11 @@ impl From<StoreError> for MercuryError {
         match error {
             StoreError::DBError(s) => MercuryError::DBError(s),
         }
+    }
+}
+
+impl Into<RpcError> for MercuryError {
+    fn into(self) -> RpcError {
+        RpcError::invalid_params(self.to_string())
     }
 }
