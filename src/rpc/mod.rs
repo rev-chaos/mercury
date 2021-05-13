@@ -1,5 +1,7 @@
 pub mod rpc_impl;
 
+use crate::types::SMTUpdateItem;
+
 use ckb_jsonrpc_types::{Transaction, TransactionView};
 use ckb_types::H256;
 use jsonrpc_core::Result as RpcResult;
@@ -21,6 +23,10 @@ pub trait MercuryRpc {
     #[rpc(name = "is_in_rce_list")]
     fn is_in_rce_list(&self, rce_hash: H256, addr: H256) -> RpcResult<bool>;
 
-    #[rpc(name = "rce_transaction_completion")]
-    fn rce_tx_completion(&self, transaction: Transaction) -> RpcResult<TransactionView>;
+    #[rpc(name = "rce_update_completion")]
+    fn rce_update_completion(
+        &self,
+        transaction: Transaction,
+        smt_update: Vec<SMTUpdateItem>,
+    ) -> RpcResult<TransactionView>;
 }

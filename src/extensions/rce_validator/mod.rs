@@ -1,4 +1,4 @@
-mod generated;
+pub mod generated;
 mod types;
 
 pub use types::{Key, KeyPrefix, Value};

@@ -185,6 +185,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "blake2b-rs"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a89a8565807f21b913288968e391819e7f9b2f0f46c7b89549c051cccf3a2771"
+dependencies = [
+ "cc",
+ "cty",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -407,7 +417,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11d4f751b424962da459cacc19b2da0597bf7ec6786ee49a20e145bd74240f9e"
 dependencies = [
  "blake2b-ref",
- "blake2b-rs",
+ "blake2b-rs 0.1.5",
 ]
 
 [[package]]
@@ -624,7 +634,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "261dd95a93c09ea24397c85b4fbca061e1da2d6573189749aeb99fe840aaf0c9"
 dependencies = [
- "blake2b-rs",
+ "blake2b-rs 0.1.5",
  "faster-hex 0.3.1",
  "includedir",
  "includedir_codegen",
@@ -897,6 +907,10 @@ dependencies = [
  "quote",
  "syn",
 ]
+name = "cty"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7313c0d620d0cb4dbd9d019e461a4beb501071ff46ec0ab933efb4daa76d73e3"
 
 [[package]]
 name = "derive_more"
@@ -1836,6 +1850,7 @@ version = "0.1.0"
 dependencies = [
  "ansi_term 0.12.1",
  "anyhow",
+ "blake2b-rs 0.2.0",
  "ckb-chain-spec",
  "ckb-indexer",
  "ckb-jsonrpc-types",
@@ -3012,7 +3027,7 @@ version = "0.4.0-rc1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec860bc00b39e71398547445bda898397ee341c97796cb65fd8a0f3bff22cc10"
 dependencies = [
- "blake2b-rs",
+ "blake2b-rs 0.1.5",
  "cfg-if 0.1.10",
 ]
 

@@ -1,6 +1,8 @@
 use crate::error::MercuryError;
+use crate::types::{BLANK_HASH, CKB_HASH_PERSONALIZATION};
 
 use anyhow::Result;
+use blake2b_rs::{Blake2b, Blake2bBuilder};
 use ckb_sdk::{Address, AddressPayload, AddressType, CodeHashIndex};
 use ckb_types::H160;
 
