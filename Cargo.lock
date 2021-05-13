@@ -1865,6 +1865,7 @@ dependencies = [
  "rlp",
  "serde",
  "serde_json",
+ "sparse-merkle-tree",
  "tokio 1.6.0",
  "tokio-compat-02",
  "toml",
@@ -3003,6 +3004,16 @@ checksum = "9e3dfc207c526015c632472a77be09cf1b6e46866581aecae5cc38fb4235dea2"
 dependencies = [
  "libc",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "sparse-merkle-tree"
+version = "0.4.0-rc1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec860bc00b39e71398547445bda898397ee341c97796cb65fd8a0f3bff22cc10"
+dependencies = [
+ "blake2b-rs",
+ "cfg-if 0.1.10",
 ]
 
 [[package]]

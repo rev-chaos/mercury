@@ -1,12 +1,13 @@
 use crate::extensions::{
     ckb_balance, rce_validator, udt_balance, CKB_EXT_PREFIX, RCE_EXT_PREFIX, UDT_EXT_PREFIX,
 };
-use crate::types::DeployedScriptConfig;
+use crate::types::RCECellPair;
 use crate::utils::{parse_address, to_fixed_array};
+use crate::{error::MercuryError, types::DeployedScriptConfig};
 use crate::{rpc::MercuryRpc, stores::add_prefix};
 
 use anyhow::Result;
-use ckb_indexer::indexer;
+use ckb_indexer::indexer::{self, DetailedLiveCell};
 use ckb_indexer::store::{IteratorDirection, Store};
 use ckb_jsonrpc_types::{Transaction, TransactionView};
 use ckb_types::core::BlockNumber;
@@ -79,27 +80,9 @@ where
     }
 
     fn rce_tx_completion(&self, transaction: Transaction) -> RpcResult<TransactionView> {
-        let mut rce_list = Vec::new();
-
-        for input in transaction.inputs.iter() {
-            if let Some(cell) = self
-                .get_detailed_live_cell(input.previous_output.clone().into())
-                .map_err(|e| Error::invalid_params(e.to_string()))?
-            {
-                if self.is_rce_cell(&cell.cell_output) {
-                    rce_list.push(cell.cell_output);
-                }
-            } else {
-                return Err(Error::internal_error());
-            }
-        }
-
-        for output in transaction.outputs.iter() {
-            let output: packed::CellOutput = output.clone().into();
-            if self.is_rce_cell(&output) {
-                rce_list.push(output);
-            }
-        }
+        let _rce_pair = self
+            .extract_rce_cells(&transaction)
+            .map_err(|e| Error::invalid_params(e.to_string()))?;
 
         Ok(Default::default())
     }
@@ -128,7 +111,7 @@ impl<S: Store> MercuryRpcImpl<S> {
     fn get_detailed_live_cell(
         &self,
         out_point: packed::OutPoint,
-    ) -> Result<Option<indexer::DetailedLiveCell>> {
+    ) -> Result<Option<DetailedLiveCell>> {
         let key_vec = indexer::Key::OutPoint(&out_point).into_vec();
         let (block_number, tx_index, cell_output, cell_data) = match self.store.get(&key_vec)? {
             Some(stored_cell) => indexer::Value::parse_cell_value(&stored_cell),
@@ -161,6 +144,48 @@ impl<S: Store> MercuryRpcImpl<S> {
             cell_output,
             cell_data,
         }))
+    }
+
+    // TODO: can do perf here
+    fn extract_rce_cells(&self, transaction: &Transaction) -> Result<Vec<RCECellPair>> {
+        let mut input_list = Vec::new();
+        let mut output_list = Vec::new();
+
+        for input in transaction.inputs.iter() {
+            if let Some(cell) = self
+                .get_detailed_live_cell(input.previous_output.clone().into())
+                .map_err(|e| Error::invalid_params(e.to_string()))?
+            {
+                if self.is_rce_cell(&cell.cell_output) {
+                    input_list.push(cell);
+                }
+            } else {
+                return Err(
+                    MercuryError::CannotFindCellByOutPoint(input.previous_output.clone()).into(),
+                );
+            }
+        }
+
+        for output in transaction.outputs.iter() {
+            let output: packed::CellOutput = output.clone().into();
+            if self.is_rce_cell(&output) {
+                output_list.push(output);
+            }
+        }
+
+        if input_list.len() != output_list.len() {
+            return Err(
+                MercuryError::RCECellCountMismatch(input_list.len(), output_list.len()).into(),
+            );
+        }
+
+        let ret = input_list
+            .into_iter()
+            .zip(output_list.into_iter())
+            .map(|(input, output)| RCECellPair { input, output })
+            .collect::<Vec<_>>();
+
+        Ok(ret)
     }
 }
 

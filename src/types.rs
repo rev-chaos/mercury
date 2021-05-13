@@ -1,5 +1,6 @@
 use crate::extensions::ExtensionType;
 
+use ckb_indexer::indexer::DetailedLiveCell;
 use ckb_jsonrpc_types::{CellDep, Script};
 use ckb_types::packed;
 use serde::{Deserialize, Serialize};
@@ -81,10 +82,15 @@ impl ExtensionsConfig {
         let mut ret = HashMap::new();
 
         for (_name, map) in self.enabled_extensions.iter() {
-            map.into_iter().for_each(|(key, val)| {
+            map.iter().for_each(|(key, val)| {
                 let _ = ret.insert(key.clone(), val.clone());
             });
         }
         ret
     }
+}
+
+pub struct RCECellPair {
+    pub input: DetailedLiveCell,
+    pub output: packed::CellOutput,
 }

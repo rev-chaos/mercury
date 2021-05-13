@@ -1,6 +1,7 @@
 use ckb_indexer::store::Error as StoreError;
+use ckb_jsonrpc_types::OutPoint;
 use derive_more::Display;
-use jsonrpc_core::Error as RpcError;
+use smt::error::Error as SMTError;
 
 #[allow(dead_code)]
 #[derive(Debug, Display)]
@@ -13,6 +14,15 @@ pub enum MercuryError {
 
     #[display(fmt = "Already a short CKB address")]
     AlreadyShortCKBAddress,
+
+    #[display(fmt = "Cannot find cell by out point {:?}", _0)]
+    CannotFindCellByOutPoint(OutPoint),
+
+    #[display(fmt = "RCE cell number mismatch input {}, output {}", _0, _1)]
+    RCECellCountMismatch(usize, usize),
+
+    #[display(fmt = "Sparse merkle tree error {:?}", _0)]
+    SMTError(String),
 }
 
 impl std::error::Error for MercuryError {}
@@ -25,8 +35,8 @@ impl From<StoreError> for MercuryError {
     }
 }
 
-impl Into<RpcError> for MercuryError {
-    fn into(self) -> RpcError {
-        RpcError::invalid_params(self.to_string())
+impl From<SMTError> for MercuryError {
+    fn from(error: SMTError) -> Self {
+        MercuryError::SMTError(error.to_string())
     }
 }
