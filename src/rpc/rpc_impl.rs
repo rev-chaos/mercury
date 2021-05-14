@@ -12,11 +12,11 @@ use ckb_jsonrpc_types::{Transaction, TransactionView};
 use ckb_types::{bytes::Bytes, core::BlockNumber};
 use ckb_types::{packed, prelude::*, H256};
 use jsonrpc_core::{Error, Result as RpcResult};
-use smt::{blake2b::Blake2bHasher, default_store::DefaultStore, H256 as SMT_H256};
+use smt::{blake2b::Blake2bHasher, default_store::DefaultStore};
 
 use std::collections::HashMap;
 
-type SMT = smt::SparseMerkleTree<Blake2bHasher, SMT_H256, DefaultStore<SMT_H256>>;
+type SMT = smt::SparseMerkleTree<Blake2bHasher, smt::H256, DefaultStore<smt::H256>>;
 
 macro_rules! rpc_try {
     ($input: expr) => {
@@ -107,8 +107,8 @@ where
 
             let input_hash: [u8; 32] = input_detail.cell_output.lock().calc_script_hash().unpack();
             let output_hash: [u8; 32] = output.lock().calc_script_hash().unpack();
-            let keys: Vec<SMT_H256> = vec![input_hash.clone().into(), output_hash.clone().into()];
-            let leaves: Vec<(SMT_H256, SMT_H256)> = vec![
+            let keys: Vec<smt::H256> = vec![input_hash.clone().into(), output_hash.clone().into()];
+            let leaves: Vec<(smt::H256, smt::H256)> = vec![
                 (input_hash.into(), build_smt_value(true)),
                 (output_hash.into(), build_smt_value(true)),
             ];
@@ -149,7 +149,7 @@ where
             .map_err(|e| Error::invalid_params(e.to_string()))?;
 
         let new_root: [u8; 32] = smt.root().to_owned().into();
-        let output_data = self.build_rce_data(new_root, rule.flag());
+        let output_data = self.build_rce_data(new_root, rule.flags());
         let witness_args = self
             .build_witness_args(&smt, update_item)
             .map_err(|e| Error::invalid_params(e.to_string()))?;
@@ -294,7 +294,7 @@ impl<S: Store> MercuryRpcImpl<S> {
     fn build_rce_data(&self, root: [u8; 32], flag: packed::Byte) -> Bytes {
         xudt_rce::RCDataBuilder(xudt_rce::RCDataUnion::RCRule(
             xudt_rce::RCRuleBuilder::default()
-                .flag(flag)
+                .flags(flag)
                 .smt_root(root.pack())
                 .build(),
         ))
@@ -310,7 +310,7 @@ impl<S: Store> MercuryRpcImpl<S> {
         let smt_proof = smt
             .merkle_proof(keys)
             .map_err(|e| MercuryError::SMTError(e.to_string()))?
-            .take();
+            .com;
 
         let leaves_path = packed::BytesVecBuilder::default()
             .set(
@@ -365,7 +365,7 @@ impl<S: Store> MercuryRpcImpl<S> {
     }
 }
 
-fn build_smt_value(is_in: bool) -> SMT_H256 {
+fn build_smt_value(is_in: bool) -> smt::H256 {
     let v = is_in.into();
     let ret: [u8; 32] = array_init::array_init(|i| if i == 0 { v } else { 0 });
     ret.into()

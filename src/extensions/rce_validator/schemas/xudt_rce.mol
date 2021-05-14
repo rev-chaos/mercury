@@ -51,18 +51,3 @@ table XudtData {
     lock: Bytes,
     data: BytesVec,
 }
-
-
-
-
-struct Proof {
-    path: Byte32,
-    height: byte,
-}
-
-vector ProofVec <Proof>;
-
-table MerkleProof {
-    leaves_path: BytesVec,
-    proof: ProofVec,
-}
