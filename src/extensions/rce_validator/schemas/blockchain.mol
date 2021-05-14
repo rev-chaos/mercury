@@ -2,7 +2,6 @@
 
 // The `UintN` is used to store a `N` bits unsigned integer
 // as a byte array in little endian.
-array Uint8 [byte; 1];
 array Uint32 [byte; 4];
 array Uint64 [byte; 8];
 array Uint128 [byte; 16];

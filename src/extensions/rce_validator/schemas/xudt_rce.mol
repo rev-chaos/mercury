@@ -10,7 +10,7 @@ table XudtWitnessInput {
 
 struct RCRule {
   smt_root: Byte32,
-  flag: byte,
+  flags: byte,
 }
 
 vector RCCellVec <Byte32>;
@@ -51,6 +51,9 @@ table XudtData {
     lock: Bytes,
     data: BytesVec,
 }
+
+
+
 
 struct Proof {
     path: Byte32,

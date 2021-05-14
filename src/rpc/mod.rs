@@ -23,6 +23,9 @@ pub trait MercuryRpc {
     #[rpc(name = "is_in_rce_list")]
     fn is_in_rce_list(&self, rce_hash: H256, addr: H256) -> RpcResult<bool>;
 
+    #[rpc(name = "transfer_with_rce_completion")]
+    fn transfer_with_rce_completion(&self, transaction: Transaction) -> RpcResult<TransactionView>;
+
     #[rpc(name = "rce_update_completion")]
     fn rce_update_completion(
         &self,

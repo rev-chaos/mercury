@@ -1,8 +1,6 @@
 use crate::error::MercuryError;
-use crate::types::{BLANK_HASH, CKB_HASH_PERSONALIZATION};
 
 use anyhow::Result;
-use blake2b_rs::{Blake2b, Blake2bBuilder};
 use ckb_sdk::{Address, AddressPayload, AddressType, CodeHashIndex};
 use ckb_types::H160;
 
@@ -14,7 +12,7 @@ pub fn parse_address(input: &str) -> Result<Address> {
 
 pub fn _to_short_address(input: &Address) -> Result<Address> {
     if input.payload().ty() == AddressType::Short {
-        return Err(MercuryError::AlreadyShortCKBAddress.into());
+        return Err(MercuryError::_AlreadyShortCKBAddress.into());
     }
 
     // The input type is Address. It is impossible to panic here.

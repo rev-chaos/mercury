@@ -1,6 +1,6 @@
 use crate::extensions::rce_validator::{self, generated::xudt_rce};
 use crate::extensions::{ckb_balance, udt_balance, CKB_EXT_PREFIX, RCE_EXT_PREFIX, UDT_EXT_PREFIX};
-use crate::types::{RCECellPair, SMTUpdateItem, SMTValue};
+use crate::types::{RCECellPair, SMTUpdateItem};
 use crate::utils::{parse_address, to_fixed_array};
 use crate::{error::MercuryError, types::DeployedScriptConfig};
 use crate::{rpc::MercuryRpc, stores::add_prefix};
@@ -12,11 +12,17 @@ use ckb_jsonrpc_types::{Transaction, TransactionView};
 use ckb_types::{bytes::Bytes, core::BlockNumber};
 use ckb_types::{packed, prelude::*, H256};
 use jsonrpc_core::{Error, Result as RpcResult};
-use smt::{blake2b::Blake2bHasher, default_store::DefaultStore};
+use smt::{blake2b::Blake2bHasher, default_store::DefaultStore, H256 as SMT_H256};
 
 use std::collections::HashMap;
 
-type SMT = smt::SparseMerkleTree<Blake2bHasher, SMTValue, DefaultStore<SMTValue>>;
+type SMT = smt::SparseMerkleTree<Blake2bHasher, SMT_H256, DefaultStore<SMT_H256>>;
+
+macro_rules! rpc_try {
+    ($input: expr) => {
+        $input.map_err(|e| Error::invalid_params(e.to_string()))?
+    };
+}
 
 pub struct MercuryRpcImpl<S> {
     store: S,
@@ -81,6 +87,51 @@ where
             )
     }
 
+    fn transfer_with_rce_completion(&self, transaction: Transaction) -> RpcResult<TransactionView> {
+        let tx: packed::Transaction = transaction.into();
+        let mut witnesses = tx.witnesses().unpack();
+        let tx_view = tx.clone().into_view();
+
+        for (idx, (input, output)) in tx_view
+            .inputs()
+            .into_iter()
+            .zip(tx_view.outputs().into_iter())
+            .enumerate()
+        {
+            let input_detail = rpc_try!(self
+                .get_detailed_live_cell(input.previous_output())
+                .map_err(|e| Error::invalid_params(e.to_string()))?
+                .ok_or_else(|| MercuryError::CannotFindCellByOutPoint(
+                    input.previous_output().into(),
+                )));
+
+            let input_hash: [u8; 32] = input_detail.cell_output.lock().calc_script_hash().unpack();
+            let output_hash: [u8; 32] = output.lock().calc_script_hash().unpack();
+            let keys: Vec<SMT_H256> = vec![input_hash.clone().into(), output_hash.clone().into()];
+            let leaves: Vec<(SMT_H256, SMT_H256)> = vec![
+                (input_hash.into(), build_smt_value(true)),
+                (output_hash.into(), build_smt_value(true)),
+            ];
+
+            let xudt_data =
+                xudt_rce::XudtData::from_slice(input_detail.cell_data.as_slice()).unwrap();
+            let rce_data =
+                xudt_rce::RCRule::from_slice(xudt_data.data().get(0).unwrap().as_slice()).unwrap();
+            let root: [u8; 32] = rce_data.smt_root().unpack();
+            let smt = SMT::new(root.into(), DefaultStore::default());
+            let proof: Vec<u8> = rpc_try!(rpc_try!(smt.merkle_proof(keys)).compile(leaves)).into();
+
+            change_witness(&mut witnesses, idx, proof.into());
+        }
+
+        let w = witnesses
+            .into_iter()
+            .map(|bytes| bytes.pack())
+            .collect::<Vec<packed::Bytes>>();
+
+        Ok(tx.as_advanced_builder().set_witnesses(w).build().into())
+    }
+
     fn rce_update_completion(
         &self,
         transaction: Transaction,
@@ -90,7 +141,7 @@ where
             .extract_rce_cells(&transaction)
             .map_err(|e| Error::invalid_params(e.to_string()))?;
 
-        let rule = get_rc_rule(rce_pair.input.cell_data.as_slice());
+        let rule = self.get_rc_rule(rce_pair.input.cell_data.as_slice());
         let root: [u8; 32] = rule.smt_root().unpack();
         let mut smt = SMT::new(root.into(), DefaultStore::default());
 
@@ -98,11 +149,12 @@ where
             .map_err(|e| Error::invalid_params(e.to_string()))?;
 
         let new_root: [u8; 32] = smt.root().to_owned().into();
-        let output_data = build_rce_data(new_root, rule.flag());
-        let witness_args = build_witness_args(&smt, update_item)
+        let output_data = self.build_rce_data(new_root, rule.flag());
+        let witness_args = self
+            .build_witness_args(&smt, update_item)
             .map_err(|e| Error::invalid_params(e.to_string()))?;
 
-        Ok(build_rce_transaction(
+        Ok(self.build_rce_transaction(
             transaction.into(),
             rce_pair.index,
             output_data,
@@ -207,113 +259,131 @@ impl<S: Store> MercuryRpcImpl<S> {
 
         Ok(())
     }
-}
 
-fn get_rc_rule(data: &[u8]) -> xudt_rce::RCRule {
-    let rc_data = xudt_rce::RCData::from_slice(data)
-        .expect("invalid data format")
-        .to_enum();
+    fn get_rc_rule(&self, data: &[u8]) -> xudt_rce::RCRule {
+        let rc_data = xudt_rce::RCData::from_slice(data)
+            .expect("invalid data format")
+            .to_enum();
 
-    match rc_data {
-        xudt_rce::RCDataUnion::RCRule(rule) => rule,
-        xudt_rce::RCDataUnion::RCCellVec(_cells) => unreachable!(),
+        match rc_data {
+            xudt_rce::RCDataUnion::RCRule(rule) => rule,
+            xudt_rce::RCDataUnion::RCCellVec(_cells) => unreachable!(),
+        }
+    }
+
+    fn build_rce_transaction(
+        &self,
+        origin: packed::Transaction,
+        index: usize,
+        cell_data: Bytes,
+        witness_args: Bytes,
+    ) -> TransactionView {
+        let mut witness = origin.witnesses().unpack();
+        let mut output_data = origin.clone().into_view().outputs_data().unpack();
+        change_witness(&mut witness, index, witness_args);
+        change_witness(&mut output_data, index, cell_data);
+
+        origin
+            .as_advanced_builder()
+            .witnesses(witness.pack())
+            .outputs_data(output_data.pack())
+            .build()
+            .into()
+    }
+
+    fn build_rce_data(&self, root: [u8; 32], flag: packed::Byte) -> Bytes {
+        xudt_rce::RCDataBuilder(xudt_rce::RCDataUnion::RCRule(
+            xudt_rce::RCRuleBuilder::default()
+                .flag(flag)
+                .smt_root(root.pack())
+                .build(),
+        ))
+        .build()
+        .as_bytes()
+    }
+
+    fn build_witness_args(&self, smt: &SMT, update_item: Vec<SMTUpdateItem>) -> Result<Bytes> {
+        let keys = update_item
+            .iter()
+            .map(|item| item.key.0.into())
+            .collect::<Vec<smt::H256>>();
+        let smt_proof = smt
+            .merkle_proof(keys)
+            .map_err(|e| MercuryError::SMTError(e.to_string()))?
+            .take();
+
+        let leaves_path = packed::BytesVecBuilder::default()
+            .set(
+                smt_proof
+                    .0
+                    .iter()
+                    .map(|bytes| bytes.pack())
+                    .collect::<Vec<_>>(),
+            )
+            .build();
+
+        let proof = xudt_rce::ProofVecBuilder(
+            smt_proof
+                .1
+                .iter()
+                .map(|proof| {
+                    let hash: [u8; 32] = proof.0.clone().into();
+                    xudt_rce::ProofBuilder::default()
+                        .path(hash.pack())
+                        .height(proof.1.into())
+                        .build()
+                })
+                .collect::<Vec<_>>(),
+        )
+        .build();
+
+        let merkle_proof = xudt_rce::MerkleProofBuilder::default()
+            .leaves_path(leaves_path)
+            .proof(proof)
+            .build()
+            .as_slice()
+            .iter()
+            .map(|byte| packed::Byte::from(*byte))
+            .collect::<Vec<_>>();
+
+        let update_inner = update_item
+            .into_iter()
+            .map(|item| {
+                xudt_rce::SmtUpdateItemBuilder::default()
+                    .key(item.key.pack())
+                    .values(item.val[0].into())
+                    .build()
+            })
+            .collect::<Vec<_>>();
+        let update = xudt_rce::SmtUpdateVecBuilder(update_inner).build();
+
+        Ok(xudt_rce::SmtUpdateBuilder::default()
+            .proof(xudt_rce::SmtProofBuilder(merkle_proof).build())
+            .update(update)
+            .build()
+            .as_bytes())
     }
 }
 
-fn build_rce_transaction(
-    origin: packed::Transaction,
-    index: usize,
-    cell_data: Bytes,
-    witness_args: Bytes,
-) -> TransactionView {
-    let mut witness = origin.witnesses().unpack();
-    let mut output_data = origin.clone().into_view().outputs_data().unpack();
-    swap_item(&mut witness, index, witness_args);
-    swap_item(&mut output_data, index, cell_data);
-
-    origin
-        .as_advanced_builder()
-        .witnesses(witness.pack())
-        .outputs_data(output_data.pack())
-        .build()
-        .into()
+fn build_smt_value(is_in: bool) -> SMT_H256 {
+    let v = is_in.into();
+    let ret: [u8; 32] = array_init::array_init(|i| if i == 0 { v } else { 0 });
+    ret.into()
 }
 
 fn swap_item<T>(list: &mut [T], index: usize, new_item: T) {
     *list.get_mut(index).unwrap() = new_item;
 }
 
-fn build_rce_data(root: [u8; 32], flag: packed::Byte) -> Bytes {
-    xudt_rce::RCDataBuilder(xudt_rce::RCDataUnion::RCRule(
-        xudt_rce::RCRuleBuilder::default()
-            .flag(flag)
-            .smt_root(root.pack())
-            .build(),
-    ))
-    .build()
-    .as_bytes()
-}
-
-fn build_witness_args(smt: &SMT, update_item: Vec<SMTUpdateItem>) -> Result<Bytes> {
-    let keys = update_item
-        .iter()
-        .map(|item| item.key.0.into())
-        .collect::<Vec<smt::H256>>();
-    let smt_proof = smt
-        .merkle_proof(keys)
-        .map_err(|e| MercuryError::SMTError(e.to_string()))?
-        .take();
-
-    let leaves_path = packed::BytesVecBuilder::default()
-        .set(
-            smt_proof
-                .0
-                .iter()
-                .map(|bytes| bytes.pack())
-                .collect::<Vec<_>>(),
-        )
-        .build();
-
-    let proof = xudt_rce::ProofVecBuilder(
-        smt_proof
-            .1
-            .iter()
-            .map(|proof| {
-                let hash: [u8; 32] = proof.0.clone().into();
-                xudt_rce::ProofBuilder::default()
-                    .path(hash.pack())
-                    .height(proof.1.into())
-                    .build()
-            })
-            .collect::<Vec<_>>(),
-    )
-    .build();
-
-    let merkle_proof = xudt_rce::MerkleProofBuilder::default()
-        .leaves_path(leaves_path)
-        .proof(proof)
+fn change_witness(witnesses: &mut [Bytes], index: usize, witness_type_args: Bytes) {
+    let witness_args = packed::WitnessArgs::from_slice(&witnesses[index]).unwrap();
+    let new_witness = witness_args
+        .as_builder()
+        .input_type(Some(witness_type_args).pack())
         .build()
-        .as_slice()
-        .iter()
-        .map(|byte| packed::Byte::from(*byte))
-        .collect::<Vec<_>>();
+        .as_bytes();
 
-    let update_inner = update_item
-        .into_iter()
-        .map(|item| {
-            xudt_rce::SmtUpdateItemBuilder::default()
-                .key(item.key.pack())
-                .values(item.val.into())
-                .build()
-        })
-        .collect::<Vec<_>>();
-    let update = xudt_rce::SmtUpdateVecBuilder(update_inner).build();
-
-    Ok(xudt_rce::SmtUpdateBuilder::default()
-        .proof(xudt_rce::SmtProofBuilder(merkle_proof).build())
-        .update(update)
-        .build()
-        .as_bytes())
+    swap_item(witnesses, index, new_witness);
 }
 
 #[cfg(test)]

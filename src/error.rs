@@ -3,7 +3,6 @@ use ckb_jsonrpc_types::OutPoint;
 use derive_more::Display;
 use smt::error::Error as SMTError;
 
-#[allow(dead_code)]
 #[derive(Debug, Display)]
 pub enum MercuryError {
     #[display(fmt = "DB error: {:?}", _0)]
@@ -13,13 +12,10 @@ pub enum MercuryError {
     ParseCKBAddressError(String),
 
     #[display(fmt = "Already a short CKB address")]
-    AlreadyShortCKBAddress,
+    _AlreadyShortCKBAddress,
 
     #[display(fmt = "Cannot find cell by out point {:?}", _0)]
     CannotFindCellByOutPoint(OutPoint),
-
-    #[display(fmt = "RCE cell number mismatch input {}, output {}", _0, _1)]
-    RCECellCountMismatch(usize, usize),
 
     #[display(fmt = "Sparse merkle tree error {:?}", _0)]
     SMTError(String),
