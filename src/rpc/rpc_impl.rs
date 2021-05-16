@@ -34,46 +34,37 @@ where
     S: Store + Send + Sync + 'static,
 {
     fn get_ckb_balance(&self, addr: String) -> RpcResult<Option<u64>> {
-        let address = parse_address(&addr).map_err(|e| Error::invalid_params(e.to_string()))?;
+        let address = rpc_try!(parse_address(&addr));
         let key: Vec<u8> = ckb_balance::Key::CkbAddress(&address.to_string()).into();
 
-        self.store
-            .get(&add_prefix(*CKB_EXT_PREFIX, key))
-            .map_err(|_| Error::internal_error())?
-            .map_or_else(
-                || Ok(None),
-                |bytes| Ok(Some(u64::from_be_bytes(to_fixed_array(&bytes)))),
-            )
+        rpc_try!(self.store.get(&add_prefix(*CKB_EXT_PREFIX, key))).map_or_else(
+            || Ok(None),
+            |bytes| Ok(Some(u64::from_be_bytes(to_fixed_array(&bytes)))),
+        )
     }
 
     fn get_sudt_balance(&self, sudt_hash: H256, addr: String) -> RpcResult<Option<u128>> {
-        let address = parse_address(&addr).map_err(|e| Error::invalid_params(e.to_string()))?;
+        let address = rpc_try!(parse_address(&addr));
         let mut encoded = sudt_hash.as_bytes().to_vec();
         encoded.extend_from_slice(&address.to_string().as_bytes());
         let key: Vec<u8> = udt_balance::Key::Address(&encoded).into();
 
-        self.store
-            .get(&add_prefix(*UDT_EXT_PREFIX, key))
-            .map_err(|e| Error::invalid_params(e.to_string()))?
-            .map_or_else(
-                || Ok(None),
-                |bytes| Ok(Some(u128::from_be_bytes(to_fixed_array(&bytes)))),
-            )
+        rpc_try!(self.store.get(&add_prefix(*UDT_EXT_PREFIX, key))).map_or_else(
+            || Ok(None),
+            |bytes| Ok(Some(u128::from_be_bytes(to_fixed_array(&bytes)))),
+        )
     }
 
     fn get_xudt_balance(&self, xudt_hash: H256, addr: String) -> RpcResult<Option<u128>> {
-        let address = parse_address(&addr).map_err(|e| Error::invalid_params(e.to_string()))?;
+        let address = rpc_try!(parse_address(&addr));
         let mut encoded = xudt_hash.as_bytes().to_vec();
         encoded.extend_from_slice(&address.to_string().as_bytes());
         let key: Vec<u8> = udt_balance::Key::Address(&encoded).into();
 
-        self.store
-            .get(&add_prefix(*UDT_EXT_PREFIX, key))
-            .map_err(|e| Error::invalid_params(e.to_string()))?
-            .map_or_else(
-                || Ok(None),
-                |bytes| Ok(Some(u128::from_be_bytes(to_fixed_array(&bytes)))),
-            )
+        rpc_try!(self.store.get(&add_prefix(*UDT_EXT_PREFIX, key))).map_or_else(
+            || Ok(None),
+            |bytes| Ok(Some(u128::from_be_bytes(to_fixed_array(&bytes)))),
+        )
     }
 
     fn is_in_rce_list(&self, rce_hash: H256, addr: H256) -> RpcResult<bool> {
@@ -132,15 +123,13 @@ where
         Ok(tx.as_advanced_builder().set_witnesses(w).build().into())
     }
 
-    // TODO: Support to update multiple rce script in one transaction 
+    // TODO: Support to update multiple rce script in one transaction
     fn rce_update_completion(
         &self,
         transaction: Transaction,
         update_items: Vec<SMTUpdateItem>,
     ) -> RpcResult<TransactionView> {
-        let rce_pairs = self
-            .extract_rce_cells(&transaction)
-            .map_err(|e| Error::invalid_params(e.to_string()))?;
+        let rce_pairs = rpc_try!(self.extract_rce_cells(&transaction));
 
         let rule = self.get_rc_rule(rce_pairs[0].input.cell_data.as_slice());
         let old_root: [u8; 32] = rule.smt_root().unpack();
@@ -151,9 +140,7 @@ where
 
         let new_root: [u8; 32] = smt.root().to_owned().into();
         let output_data = self.build_rce_data(new_root, rule.flags());
-        let witness_args = self
-            .build_witness_args(proof, &update_items)
-            .map_err(|e| Error::invalid_params(e.to_string()))?;
+        let witness_args = rpc_try!(self.build_witness_args(proof, &update_items));
 
         Ok(self.build_rce_transaction(
             transaction.into(),
