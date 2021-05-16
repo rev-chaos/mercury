@@ -1,7 +1,7 @@
 pub mod rpc_impl;
 mod types;
 
-use crate::types::SMTUpdateItem;
+use types::SMTUpdateItem;
 
 use ckb_jsonrpc_types::{Transaction, TransactionView};
 use ckb_types::H256;

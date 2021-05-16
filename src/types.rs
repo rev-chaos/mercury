@@ -1,6 +1,5 @@
 use crate::extensions::ExtensionType;
 
-use ckb_indexer::indexer::DetailedLiveCell;
 use ckb_jsonrpc_types::{CellDep, Script};
 use ckb_types::packed;
 use serde::{Deserialize, Serialize};
@@ -87,51 +86,5 @@ impl ExtensionsConfig {
             });
         }
         ret
-    }
-}
-
-pub struct RCECellPair {
-    pub index: usize,
-    pub input: DetailedLiveCell,
-    pub output: packed::CellOutput,
-}
-
-impl Default for RCECellPair {
-    fn default() -> Self {
-        RCECellPair {
-            index: Default::default(),
-            input: DetailedLiveCell {
-                block_number: Default::default(),
-                block_hash: Default::default(),
-                tx_index: Default::default(),
-                cell_data: Default::default(),
-                cell_output: Default::default(),
-            },
-            output: Default::default(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct SMTUpdateItem {
-    pub key: ckb_types::H256,
-    pub new_val: u8,
-}
-
-#[derive(Copy, Clone)]
-pub enum XUDTFlags {
-    Plain = 0,
-    InArgs = 1,
-    InWitness = 2,
-}
-
-impl From<u32> for XUDTFlags {
-    fn from(v: u32) -> Self {
-        match v {
-            0 => XUDTFlags::Plain,
-            1 => XUDTFlags::InArgs,
-            2 => XUDTFlags::InWitness,
-            _ => unreachable!(),
-        }
     }
 }
