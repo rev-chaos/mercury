@@ -112,24 +112,10 @@ impl Default for RCECellPair {
     }
 }
 
-impl RCECellPair {
-    pub fn set_index(&mut self, index: usize) {
-        self.index = index;
-    }
-
-    pub fn set_input(&mut self, input: DetailedLiveCell) {
-        self.input = input;
-    }
-
-    pub fn set_output(&mut self, output: packed::CellOutput) {
-        self.output = output;
-    }
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SMTUpdateItem {
     pub key: ckb_types::H256,
-    pub val: [u8; 32],
+    pub new_val: u8,
 }
 
 #[derive(Copy, Clone)]

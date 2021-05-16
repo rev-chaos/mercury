@@ -19,6 +19,9 @@ pub enum MercuryError {
 
     #[display(fmt = "Sparse merkle tree error {:?}", _0)]
     SMTError(String),
+
+    #[display(fmt = "output must be rce cell when update rce rule")]
+    InvalidOutputCellWhenUpdateRCE,
 }
 
 impl std::error::Error for MercuryError {}
