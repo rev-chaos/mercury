@@ -1,5 +1,6 @@
 use crate::extensions::rce_validator::{self, generated::xudt_rce};
 use crate::extensions::{ckb_balance, udt_balance, CKB_EXT_PREFIX, RCE_EXT_PREFIX, UDT_EXT_PREFIX};
+use crate::rpc::types::{InnerRCRule, RCState};
 use crate::types::{RCECellPair, SMTUpdateItem};
 use crate::utils::{parse_address, to_fixed_array};
 use crate::{error::MercuryError, types::DeployedScriptConfig};
@@ -16,7 +17,9 @@ use smt::{blake2b::Blake2bHasher, default_store::DefaultStore};
 
 use std::collections::HashMap;
 
-type SMT = smt::SparseMerkleTree<Blake2bHasher, smt::H256, DefaultStore<smt::H256>>;
+const MAX_RCE_RULE_NUM: usize = 8192;
+
+pub type SMT = smt::SparseMerkleTree<Blake2bHasher, smt::H256, DefaultStore<smt::H256>>;
 
 macro_rules! rpc_try {
     ($input: expr) => {
@@ -98,21 +101,14 @@ where
 
             let input_hash: [u8; 32] = input_detail.cell_output.lock().calc_script_hash().unpack();
             let output_hash: [u8; 32] = output.lock().calc_script_hash().unpack();
-            let keys: Vec<smt::H256> = vec![input_hash.clone().into(), output_hash.clone().into()];
-            let leaves: Vec<(smt::H256, smt::H256)> = vec![
-                (input_hash.into(), build_smt_value(true)),
-                (output_hash.into(), build_smt_value(true)),
-            ];
 
             let xudt_data =
                 xudt_rce::XudtData::from_slice(input_detail.cell_data.as_slice()).unwrap();
-            let rce_data =
-                xudt_rce::RCRule::from_slice(xudt_data.data().get(0).unwrap().as_slice()).unwrap();
-            let root: [u8; 32] = rce_data.smt_root().unpack();
-            let smt = SMT::new(root.into(), DefaultStore::default());
-            let proof: Vec<u8> = rpc_try!(rpc_try!(smt.merkle_proof(keys)).compile(leaves)).into();
 
-            change_witness(&mut witnesses, idx, proof.into());
+            let rules = rpc_try!(self.parse_xudt_data(xudt_data.data().unpack()));
+            let proof = rpc_try!(self.check_rules(&[input_hash, output_hash], &rules));
+
+            change_witness(&mut witnesses, idx, proof);
         }
 
         let w = witnesses
@@ -259,13 +255,22 @@ impl<S: Store> MercuryRpcImpl<S> {
             leaves.push((key, val));
         }
 
-        let proof = smt
+        self.build_merkle_proof(smt, keys, leaves)
+    }
+
+    fn build_merkle_proof(
+        &self,
+        smt: &SMT,
+        keys: Vec<smt::H256>,
+        leaves: Vec<(smt::H256, smt::H256)>,
+    ) -> Result<Vec<u8>> {
+        let ret = smt
             .merkle_proof(keys)
             .map_err(|e| MercuryError::SMTError(e.to_string()))?
             .compile(leaves)
             .map_err(|e| MercuryError::SMTError(e.to_string()))?;
 
-        Ok(proof.into())
+        Ok(ret.into())
     }
 
     // TODO: deny reduplicate key in the update list now.
@@ -299,7 +304,7 @@ impl<S: Store> MercuryRpcImpl<S> {
         let mut witness = origin.witnesses().unpack();
         let mut output_data = origin.clone().into_view().outputs_data().unpack();
         change_witness(&mut witness, index, witness_args);
-        change_witness(&mut output_data, index, cell_data);
+        swap_item(&mut output_data, index, cell_data);
 
         origin
             .as_advanced_builder()
@@ -339,6 +344,141 @@ impl<S: Store> MercuryRpcImpl<S> {
             .update(update)
             .build()
             .as_bytes())
+    }
+
+    fn parse_xudt_data(&self, data: Vec<Bytes>) -> Result<Vec<InnerRCRule>> {
+        if data.is_empty() {
+            return Err(MercuryError::MissingRCData.into());
+        }
+
+        if data.len() == 1 {
+            // The RC data is only one RC rule.
+            let raw_data = data.get(0).cloned().unwrap();
+            let rule = xudt_rce::RCRule::from_slice(&raw_data).unwrap();
+            let kind = RCState::from(rule.flags());
+            let root: [u8; 32] = rule.smt_root().unpack();
+            let smt = SMT::new(root.into(), Default::default());
+
+            return Ok(vec![InnerRCRule::new(kind, smt)]);
+        }
+
+        // The RCCellVec can include at most 8196 RC rules.
+        if data.len() > MAX_RCE_RULE_NUM {
+            return Err(MercuryError::RCRuleNumOverMax(data.len()).into());
+        }
+
+        Ok(data
+            .iter()
+            .map(|raw_data| {
+                let rule = xudt_rce::RCRule::from_slice(&raw_data).unwrap();
+                let kind = RCState::from(rule.flags());
+                let root: [u8; 32] = rule.smt_root().unpack();
+                let smt = SMT::new(root.into(), Default::default());
+                InnerRCRule::new(kind, smt)
+            })
+            .collect::<Vec<_>>())
+    }
+
+    fn check_rules(&self, hash_list: &[[u8; 32]], rule_list: &[InnerRCRule]) -> Result<Bytes> {
+        let mut proof_list = Vec::new();
+
+        for rule in rule_list.iter() {
+            match rule.kind {
+                RCState::WhiteList => {
+                    self.check_white_list(hash_list, rule, &mut proof_list)?;
+                }
+
+                RCState::BlackList => {
+                    self.check_black_list(hash_list, rule, &mut proof_list)?;
+                }
+
+                _ => {
+                    return Err(MercuryError::RCRuleIsInStopState(hex::encode(
+                        rule.smt.root().as_slice(),
+                    ))
+                    .into())
+                }
+            }
+        }
+
+        let mut ret_builder = xudt_rce::SmtProofVecBuilder::default();
+        for proof in proof_list.iter() {
+            ret_builder = ret_builder.push(
+                xudt_rce::SmtProofBuilder::default()
+                    .set(proof.clone())
+                    .build(),
+            );
+        }
+
+        Ok(ret_builder.build().as_bytes())
+    }
+
+    fn check_white_list(
+        &self,
+        hash_list: &[[u8; 32]],
+        rule: &InnerRCRule,
+        proof_list: &mut Vec<Vec<packed::Byte>>,
+    ) -> Result<()> {
+        let smt = &rule.smt;
+        let mut keys: Vec<smt::H256> = Vec::new();
+        let mut leaves: Vec<(smt::H256, smt::H256)> = Vec::new();
+
+        for hash in hash_list.iter() {
+            let tmp: [u8; 32] = *hash;
+            let res = smt
+                .get(&tmp.into())
+                .map_err(|e| MercuryError::SMTError(e.to_string()))?;
+
+            if res.is_zero() {
+                return Err(MercuryError::CheckWhiteListFailed(hex::encode(tmp)).into());
+            } else {
+                keys.push(tmp.into());
+                leaves.push((tmp.into(), res));
+            }
+        }
+
+        let proof = self
+            .build_merkle_proof(&smt, keys, leaves)?
+            .iter()
+            .map(|byte| packed::Byte::new(*byte))
+            .collect::<Vec<_>>();
+
+        proof_list.push(proof);
+        Ok(())
+    }
+
+    fn check_black_list(
+        &self,
+        hash_list: &[[u8; 32]],
+        rule: &InnerRCRule,
+        proof_list: &mut Vec<Vec<packed::Byte>>,
+    ) -> Result<()> {
+        let smt = &rule.smt;
+        let mut keys: Vec<smt::H256> = Vec::new();
+        let mut leaves: Vec<(smt::H256, smt::H256)> = Vec::new();
+
+        for hash in hash_list.iter() {
+            let tmp: [u8; 32] = *hash;
+            let res = smt
+                .get(&tmp.into())
+                .map_err(|e| MercuryError::SMTError(e.to_string()))?;
+
+            if !res.is_zero() {
+                return Err(MercuryError::CheckBlackListFailed(hex::encode(tmp)).into());
+            } else {
+                keys.push(tmp.into());
+                leaves.push((tmp.into(), res));
+            }
+        }
+
+        let proof = self
+            .build_merkle_proof(&smt, keys, leaves)?
+            .iter()
+            .map(|byte| packed::Byte::new(*byte))
+            .collect::<Vec<_>>();
+
+        proof_list.push(proof);
+        Ok(())
     }
 }
 

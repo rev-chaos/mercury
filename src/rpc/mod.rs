@@ -1,4 +1,5 @@
 pub mod rpc_impl;
+mod types;
 
 use crate::types::SMTUpdateItem;
 

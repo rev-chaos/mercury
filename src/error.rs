@@ -20,8 +20,23 @@ pub enum MercuryError {
     #[display(fmt = "Sparse merkle tree error {:?}", _0)]
     SMTError(String),
 
-    #[display(fmt = "output must be rce cell when update rce rule")]
+    #[display(fmt = "Output must be rce cell when update rce rule")]
     InvalidOutputCellWhenUpdateRCE,
+
+    #[display(fmt = "Missing RC data")]
+    MissingRCData,
+
+    #[display(fmt = "The rce rule number {} is above 8196", _0)]
+    RCRuleNumOverMax(usize),
+
+    #[display(fmt = "Check white list failed, script hash {:?}", _0)]
+    CheckWhiteListFailed(String),
+
+    #[display(fmt = "Check black list failed, script hash {:?}", _0)]
+    CheckBlackListFailed(String),
+
+    #[display(fmt = "Rce rule is in stop state, root {:?}", _0)]
+    RCRuleIsInStopState(String),
 }
 
 impl std::error::Error for MercuryError {}
