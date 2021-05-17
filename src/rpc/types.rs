@@ -74,6 +74,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::identity_op)]
     fn test_state_from_byte() {
         let bl = 0u8;
         let wl = 0u8 ^ WHITE_BLACK_LIST_MASK;
