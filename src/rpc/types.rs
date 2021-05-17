@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub const WHITE_BLACK_LIST_MASK: u8 = 0x2;
 pub const EMERGENCY_HALT_MODE_MASK: u8 = 0x1;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RCState {
     WhiteList,
     BlackList,
@@ -67,4 +67,24 @@ impl Default for RCECellPair {
 pub struct SMTUpdateItem {
     pub key: ckb_types::H256,
     pub new_val: u8,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_state_from_byte() {
+        let bl = 0u8;
+        let wl = 0u8 ^ WHITE_BLACK_LIST_MASK;
+
+        assert_eq!(RCState::from(packed::Byte::new(bl)), RCState::BlackList);
+        assert_eq!(RCState::from(packed::Byte::new(wl)), RCState::WhiteList);
+
+        let halt_bl = bl ^ EMERGENCY_HALT_MODE_MASK;
+        let halt_wl = wl ^ EMERGENCY_HALT_MODE_MASK;
+
+        assert_eq!(RCState::from(packed::Byte::new(halt_bl)), RCState::Halt);
+        assert_eq!(RCState::from(packed::Byte::new(halt_wl)), RCState::Halt);
+    }
 }
