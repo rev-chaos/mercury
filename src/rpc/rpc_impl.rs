@@ -1,6 +1,6 @@
 use crate::extensions::rce_validator::{self, generated::xudt_rce};
 use crate::extensions::{ckb_balance, udt_balance, CKB_EXT_PREFIX, RCE_EXT_PREFIX, UDT_EXT_PREFIX};
-use crate::rpc::types::{InnerRCRule, RCState, RCECellPair, SMTUpdateItem};
+use crate::rpc::types::{InnerRCRule, RCECellPair, RCState, SMTUpdateItem};
 use crate::utils::{parse_address, to_fixed_array};
 use crate::{error::MercuryError, types::DeployedScriptConfig};
 use crate::{rpc::MercuryRpc, stores::add_prefix};
