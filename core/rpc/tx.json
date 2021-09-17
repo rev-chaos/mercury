@@ -1,0 +1,122 @@
+{
+  "tx_view": {
+    "version": "0x0",
+    "cell_deps": [
+      {
+        "out_point": {
+          "tx_hash": "0xec26b0f85ed839ece5f11c4c4e837ec359f5adc4420410f6453b1f6b60fb96a6",
+          "index": "0x0"
+        },
+        "dep_type": "dep_group"
+      },
+      {
+        "out_point": {
+          "tx_hash": "0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37",
+          "index": "0x0"
+        },
+        "dep_type": "dep_group"
+      }
+    ],
+    "header_deps": [],
+    "inputs": [
+      {
+        "since": "0x0",
+        "previous_output": {
+          "tx_hash": "0xce3cd73d413f1754dacca018e289a90c1044487d35a6d890ddeb246b12d31375",
+          "index": "0x0"
+        }
+      },
+      {
+        "since": "0x0",
+        "previous_output": {
+          "tx_hash": "0x92d571ca7077215d9d7d261c2f1dc379f023ad47b8cc4645e3f479b22dfdeb73",
+          "index": "0x1"
+        }
+      },
+      {
+        "since": "0x0",
+        "previous_output": {
+          "tx_hash": "0xf3cc6def0286c11d06a261e8cbcbc1fa1b26a45dc555a00f6893c82d877f7ed4",
+          "index": "0x1"
+        }
+      },
+      {
+        "since": "0x0",
+        "previous_output": {
+          "tx_hash": "0x92d571ca7077215d9d7d261c2f1dc379f023ad47b8cc4645e3f479b22dfdeb73",
+          "index": "0x0"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "capacity": "0x2540bdf76",
+        "lock": {
+          "code_hash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+          "hash_type": "type",
+          "args": "0x44935ebc860de08282b0163537697e6d6d18d1fa"
+        },
+        "type": null
+      },
+      {
+        "capacity": "0x34e62ce00",
+        "lock": {
+          "code_hash": "0x3419a1c09eb2567f6552ee7a8ecffd64155cffe0f1796e6e61ec088d740c1356",
+          "hash_type": "type",
+          "args": "0xc53bc9a5b985cd6f8dac5fbca877384d382486ab"
+        },
+        "type": {
+          "code_hash": "0xc5e5dcf215925f7ef4dfaf5f4b4f105bc321c02776d6e7d52a1db3fcd9d011a4",
+          "hash_type": "type",
+          "args": "0x7c7f0ee1d582c385342367792946cff3767fe02f26fd7f07dba23ae3c65b28bc"
+        }
+      },
+      {
+        "capacity": "0x34e62ce00",
+        "lock": {
+          "code_hash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+          "hash_type": "type",
+          "args": "0x791359d5f872fc4e72185034da0becb5febce98b"
+        },
+        "type": null
+      },
+      {
+        "capacity": "0x3c5986200",
+        "lock": {
+          "code_hash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+          "hash_type": "type",
+          "args": "0xc53bc9a5b985cd6f8dac5fbca877384d382486ab"
+        },
+        "type": {
+          "code_hash": "0xc5e5dcf215925f7ef4dfaf5f4b4f105bc321c02776d6e7d52a1db3fcd9d011a4",
+          "hash_type": "type",
+          "args": "0x7c7f0ee1d582c385342367792946cff3767fe02f26fd7f07dba23ae3c65b28bc"
+        }
+      }
+    ],
+    "outputs_data": [
+      "0x",
+      "0x1f050000000000000000000000000000",
+      "0x",
+      "0x8d874f5c678d03000000000000000000"
+    ],
+    "witnesses": [],
+    "hash": "0xee77f9a35e4fd2ee0aa592ce0a78c4cd46c1a10548f314f8942b18ff376b9721"
+  },
+  "signature_entries": [
+    {
+      "type_": "WitnessLock",
+      "index": 0,
+      "group_len": 1,
+      "pub_key": "ckt1qyqyfy67hjrqmcyzs2cpvdfhd9lx6mgc68aqukw69v",
+      "signature_type": "Secp256k1"
+    },
+    {
+      "type_": "WitnessLock",
+      "index": 2,
+      "group_len": 2,
+      "pub_key": "ckt1qyq8jy6e6hu89lzwwgv9qdx6p0kttl4uax9s79m0mr",
+      "signature_type": "Secp256k1"
+    }
+  ]
+}

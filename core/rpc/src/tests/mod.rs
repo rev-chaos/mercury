@@ -118,6 +118,7 @@ impl RpcTestEngine {
     }
 
     pub async fn new_pg(net_ty: NetworkType, url: &str) -> Self {
+        init_debugger();
         let store = RelationalStorage::new(100, 0, 0, log::LevelFilter::Info);
         store
             .connect(
